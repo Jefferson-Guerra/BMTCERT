@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>BMTCERT</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- Panel lateral izquierdo -->
+    <nav class="sidebar">
+      <div class="sidebar-title">BMTCERT</div>
+      <button class="nav-item active" data-view="view-cargar">📄 Cargar Certificado</button>
+      <button class="nav-item" data-view="view-decodificar">🔍 Decodificar</button>
+      <button class="nav-item" data-view="view-validar">✅ Validación Igualdad</button>
+      <button class="nav-item" data-view="view-dns">🌐 Registro DNS</button>
+      <button class="nav-item" data-view="view-intermediarios">🗂️ Intermediarios</button>
+    </nav>
+
+    <main class="content">
+
+      <!-- ============ VISTA 1: CARGAR CERTIFICADO ============ -->
+      <section id="view-cargar" class="view active">
+        <h1>Cargar Certificado</h1>
+
+        <button class="btn-reset" onclick="resetView('view-cargar')">🔄 Reiniciar</button>
+
+        <div class="dropzone-row">  
+          <div class="dropzone" id="dropCrt" data-accept=".crt,.cer,.pem">
+            <div class="dz-icon">📜</div>
+            <div>Arrastra aquí el certificado <b>.crt</b></div>
+            <div class="dz-filename" id="dropCrtName"></div>
+          </div>
+          <div class="dropzone" id="dropKey" data-accept=".key">
+            <div class="dz-icon">🔑</div>
+            <div>Arrastra aquí la llave <b>.key</b></div>
+            <div class="dz-filename" id="dropKeyName"></div>
+          </div>
+        </div>
+
+        <div class="result-badge" id="certKeyMatchStatus"></div>
+        <br>
+
+        <div class="info-box" id="certInfoBox" style="display:none;">
+          <h3>Información Extraída</h3>
+          <table class="info-table">
+            <tr><td>Dominio Principal (CN):</td><td id="infoCN">-</td></tr>
+            <tr><td>Tipo de Certificado:</td><td id="infoTipo">-</td></tr>
+            <tr id="rowOrganizacion" style="display:none;"><td>Nombre de Organización:</td><td id="infoOrganizacion">-</td></tr>
+            <tr><td>Emisor Organismo (CA):</td><td id="infoCA">-</td></tr>
+            <tr><td>Válido Desde (Inicio):</td><td id="infoDesde">-</td></tr>
+            <tr><td>Válido Hasta (Expiración):</td><td id="infoHasta">-</td></tr>
+            <tr><td>Estado de Vigencia:</td><td id="infoEstado">-</td></tr>
+          </table>
+        </div>
+
+        <!-- Nginx / Apache -->
+        <div class="section-box">
+          <h3>Exportar Archivos</h3>
+          <div class="two-col">
+            <div class="col-box">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkApache" checked />
+                <span><b>Apache</b></span>
+              </label>
+              <p class="hint">Genera: chain.crt, &lt;dominio&gt;.crt, &lt;dominio&gt;.key</p>
+            </div>
+            <div class="col-box">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkNginx" checked />
+                <span><b>Nginx</b></span>
+              </label>
+              <p class="hint">Genera: certificado_completo.crt, &lt;dominio&gt;.key</p>
+            </div>
+          </div>
+          <button class="btn-primary" id="btnExportServer" disabled>Exportar</button>
+          <div class="status-msg" id="serverExportStatus"></div>
+        </div>
+
+        <!-- PFX / JKS -->
+        <div class="section-box">
+          <h3>Generar Keystores</h3>
+          <div class="two-col">
+
+            <!-- PFX -->
+            <div class="col-box">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkPfx" checked />
+                <span><b>PFX</b></span>
+              </label>
+              <label class="checkbox-label sub">
+                <input type="checkbox" id="chkPfxDefault" checked />
+                <span>Predeterminado</span>
+              </label>
+              <div class="field-row">
+                <label>Alias</label>
+                <input type="text" id="pfxAlias" value="dominio_2026" disabled />
+              </div>
+              <div class="field-row">
+                <label>Clave</label>
+                <input type="text" id="pfxPassword" value="123456" disabled />
+              </div>
+              <button class="btn-secondary" id="btnExportPfx" disabled>Exportar PFX</button>
+              <div class="status-msg" id="pfxExportStatus"></div>
+              <button class="btn-secondary" id="btnReinforcePfx" style="display:none; margin-top:8px;">
+                🛡️ Reforzar en Windows (Instalar y Reexportar)
+              </button>
+              <div class="status-msg" id="pfxReinforceStatus"></div>
+            </div>
+
+            <!-- JKS -->
+            <div class="col-box">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkJks" checked/>
+                <span><b>JKS</b></span>
+              </label>
+              <label class="checkbox-label sub">
+                <input type="checkbox" id="chkJksDefault" checked />
+                <span>Predeterminado</span>
+              </label>
+              <div class="field-row">
+                <label>Alias</label>
+                <input type="text" id="jksAlias" value="server" disabled />
+              </div>
+              <div class="field-row">
+                <label>Clave</label>
+                <input type="text" id="jksPassword" value="123456" disabled />
+              </div>
+              <button class="btn-secondary" id="btnExportJks" disabled>Exportar JKS</button>
+              <div class="status-msg" id="jksExportStatus"></div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ VISTA 2: DECODIFICAR ============ -->
+      <section id="view-decodificar" class="view">
+        <h1>Decodificar</h1>
+        <p class="hint">Arrastra un archivo .crt, .csr, .pfx o .jks para ver su información.</p>
+
+        <div class="dropzone" id="dropDecode" data-accept=".crt,.cer,.pem,.csr,.pfx,.p12,.jks">
+          <div class="dz-icon">🗂️</div>
+          <div>Arrastra aquí el archivo a decodificar</div>
+          <div class="dz-filename" id="dropDecodeName"></div>
+        </div>
+
+        <div id="decodePasswordBox" style="display:none;" class="field-row">
+          <label>Contraseña del archivo (.pfx / .jks)</label>
+          <input type="text" id="decodePassword" placeholder="Contraseña" />
+          <button class="btn-secondary" id="btnDecodeRetry">Decodificar</button>
+        </div>
+
+        <br>
+        <div class="output-box" id="decodeOutputBox" style="display:none;">
+          <div class="output-header">
+            <span>Resultado</span>
+            <button class="btn-secondary" id="btnCopyDecode">Copiar</button>
+          </div>
+          <pre id="decodeOutput"></pre>
+        </div>
+        <button class="btn-reset" onclick="resetView('view-decodificar')">🔄 Reiniciar</button>
+      </section>
+
+      <!-- ============ VISTA 3: VALIDACION IGUALDAD ============ -->
+      <section id="view-validar" class="view">
+        <h1>Validación Igualdad</h1>
+
+        <button class="btn-reset" onclick="resetView('view-validar')">🔄 Reiniciar</button>
+
+        <div class="section-box">
+          <h3>Certificado (.crt) ↔ Llave (.key)</h3>
+          <div class="dropzone-row">
+            <div class="dropzone small" id="dropValCrt" data-accept=".crt,.cer,.pem">
+              <div class="dz-icon">📜</div><div>Certificado .crt</div>
+              <div class="dz-filename" id="dropValCrtName"></div>
+            </div>
+            <div class="dropzone small" id="dropValKey" data-accept=".key">
+              <div class="dz-icon">🔑</div><div>Llave .key</div>
+              <div class="dz-filename" id="dropValKeyName"></div>
+            </div>
+          </div>
+          <div class="result-badge" id="resultCertKey"></div>
+        </div>
+
+        <div class="section-box">
+          <h3>CSR (.csr) ↔ Certificado (.crt)</h3>
+          <div class="dropzone-row">
+            <div class="dropzone small" id="dropValCsr" data-accept=".csr">
+              <div class="dz-icon">📝</div><div>CSR .csr</div>
+              <div class="dz-filename" id="dropValCsrName"></div>
+            </div>
+            <div class="dropzone small" id="dropValCrt2" data-accept=".crt,.cer,.pem">
+              <div class="dz-icon">📜</div><div>Certificado .crt</div>
+              <div class="dz-filename" id="dropValCrt2Name"></div>
+            </div>
+          </div>
+          <div class="result-badge" id="resultCsrCert"></div>
+        </div>
+
+        <div class="section-box">
+          <h3>CSR (.csr) ↔ Llave (.key)</h3>
+          <div class="dropzone-row">
+            <div class="dropzone small" id="dropValCsr2" data-accept=".csr">
+              <div class="dz-icon">📝</div><div>CSR .csr</div>
+              <div class="dz-filename" id="dropValCsr2Name"></div>
+            </div>
+            <div class="dropzone small" id="dropValKey2" data-accept=".key">
+              <div class="dz-icon">🔑</div><div>Llave .key</div>
+              <div class="dz-filename" id="dropValKey2Name"></div>
+            </div>
+          </div>
+          <div class="result-badge" id="resultCsrKey"></div>
+        </div>
+      </section>
+
+      <!-- ============ VISTA 4: REGISTRO DNS ============ -->
+      <section id="view-dns" class="view">
+        <h1>Registro DNS</h1>
+
+        <button class="btn-reset" onclick="resetView('view-dns')">🔄 Reiniciar</button>
+
+        <div class="section-box">
+          <h3>Generador de Registro DNS y Correo de Validación</h3>
+            <div class="field-row">
+            <label>Registro DNS completo (CNAME):</label>
+          <textarea id="dnsInput" rows="3" placeholder="...sectigo.com" style="width:100%; padding:8px; border-radius:6px; border: 1px solid #cfd6de;"></textarea>
+        </div>
+        <button class="btn-primary" id="btnProcessDns">Procesar y Generar</button>
+      </div>
+
+      <div class="output-box" id="dnsOutputBox" style="display:none;">
+        <div class="output-header">
+        <span>Correo generado</span>
+          <button class="btn-secondary" id="btnCopyDns">Copiar</button>
+      </div>
+          <pre id="dnsOutput" style="font-size: 13px;"></pre>
+      </div>
+        </section>
+
+      <!-- ============ VISTA 5: INTERMEDIARIOS ============ -->
+      <section id="view-intermediarios" class="view">
+        <h1>Intermediarios</h1>
+
+        <button class="btn-reset" onclick="resetView('view-intermediarios')">🔄 Reiniciar</button>
+
+        <div class="section-box">
+          <div class="inter-toolbar">
+            <input type="text" id="interSearchInput" placeholder="Buscar por 'Emitido por' o 'Emitido para'..." />
+            <button class="btn-secondary btn-inline" id="btnSearchInter">Buscar</button>
+            <button class="btn-primary btn-inline" id="btnAddInter">+ Agregar</button>
+            <button class="btn-secondary btn-inline btn-danger" id="btnDeleteInter">🗑️ Eliminar</button>
+          </div>
+        </div>
+
+        <!-- Formulario de alta, aparece tras elegir un archivo con "Agregar" -->
+        <div class="section-box" id="interAddFormBox" style="display:none;">
+          <h3>Nuevo Intermediario / Raíz</h3>
+          <table class="info-table">
+            <tr><td>Título 1 (Emitido por):</td><td id="interFormEmitidoPor">-</td></tr>
+            <tr><td>Título 2 (Emitido para):</td><td id="interFormEmitidoPara">-</td></tr>
+            <tr><td>Título 3 (Fecha Inicio):</td><td id="interFormFechaInicio">-</td></tr>
+            <tr><td>Título 4 (Fecha Fin):</td><td id="interFormFechaFin">-</td></tr>
+          </table>
+          <div class="field-row" style="margin-top:12px;">
+            <label>Título 5 (opcional)</label>
+            <input type="text" id="interFormTitulo5" placeholder="Nota u observación (opcional)" />
+          </div>
+          <div class="field-row">
+            <label>Tipo</label>
+            <select id="interFormTipo">
+              <option value="Intermediario">Intermediario</option>
+              <option value="Raíz">Raíz</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-primary" id="btnSaveInter">Guardar</button>
+            <button class="btn-secondary btn-inline" id="btnCancelInter">Cancelar</button>
+          </div>
+        </div>
+
+        <div class="section-box">
+          <table class="data-table" id="interTable">
+            <thead>
+              <tr>
+                <th></th>
+                <th>N°</th>
+                <th>Emitido por</th>
+                <th>Emitido para</th>
+                <th>Fecha Inicio</th>
+                <th>Fecha Fin</th>
+                <th>Tipo</th>
+                <th>Título 5</th>
+              </tr>
+            </thead>
+            <tbody id="interTableBody"></tbody>
+          </table>
+          <p class="hint" id="interEmptyHint">No hay intermediarios guardados todavía. Usa "+ Agregar" para importar un .crt.</p>
+        </div>
+
+        <div class="info-box" id="interDetailBox" style="display:none;">
+          <h3>Detalle del Intermediario Seleccionado</h3>
+          <table class="info-table">
+            <tr><td>Título 1 (Emitido por):</td><td id="interDetailT1">-</td></tr>
+            <tr><td>Título 2 (Emitido para):</td><td id="interDetailT2">-</td></tr>
+            <tr><td>Título 3 (Fecha Inicio):</td><td id="interDetailT3">-</td></tr>
+            <tr><td>Título 4 (Fecha Fin):</td><td id="interDetailT4">-</td></tr>
+            <tr><td>Título 5 (opcional):</td><td id="interDetailT5">-</td></tr>
+            <tr><td>Tipo:</td><td id="interDetailTipo">-</td></tr>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
