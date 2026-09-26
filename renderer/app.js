@@ -163,13 +163,14 @@ document.getElementById('btnExportServer').addEventListener('click', async () =>
     leafCertPem: state.certPem,
     keyPem: state.keyPem,
     tipoValidacion: state.certInfo.tipoValidacion,
+    issuerCN: state.certInfo.issuerCN,
     domain,
     includeApache,
     includeNginx
   });
 
   if (result.ok) {
-    showStatus(statusEl, 'Exportado correctamente en: ' + result.created.join(', '), true);
+    showStatus(statusEl, 'Exportado correctamente en: ' + result.created.join(', ') + (result.warning || ''), true);
   } else {
     showStatus(statusEl, 'Error: ' + result.error, false);
   }
@@ -207,13 +208,14 @@ document.getElementById('btnExportPfx').addEventListener('click', async () => {
     certPem: state.certPem,
     keyPem: state.keyPem,
     tipoValidacion: state.certInfo.tipoValidacion,
+    issuerCN: state.certInfo.issuerCN,
     alias,
     password,
     targetDir
   });
 
   if (result.ok) {
-    showStatus(statusEl, 'PFX generado en: ' + result.path, true);
+    showStatus(statusEl, 'PFX generado en: ' + result.path + (result.warning || ''), true);
     state.lastPfxPath = result.path;
     state.lastPfxPassword = password;
     if (window.api.platform === 'win32') {
@@ -266,12 +268,13 @@ document.getElementById('btnExportJks').addEventListener('click', async () => {
     certPem: state.certPem,
     keyPem: state.keyPem,
     tipoValidacion: state.certInfo.tipoValidacion,
+    issuerCN: state.certInfo.issuerCN,
     alias,
     password,
     targetDir
   });
 
-  if (result.ok) showStatus(statusEl, 'JKS generado en: ' + result.path, true);
+  if (result.ok) showStatus(statusEl, 'JKS generado en: ' + result.path + (result.warning || ''), true);
   else showStatus(statusEl, 'Error: ' + result.error, false);
 });
 
@@ -571,6 +574,7 @@ function renderInterTable() {
       <td>${item.fechaInicio || '-'}</td>
       <td>${item.fechaFin || '-'}</td>
       <td>${item.tipo || '-'}</td>
+      <td>${item.nombreArchivo || '-'}</td>
       <td>${item.nota || '-'}</td>
     `;
 
@@ -595,6 +599,7 @@ function showInterDetail(item) {
   document.getElementById('interDetailT4').textContent = item.fechaFin || '-';
   document.getElementById('interDetailT5').textContent = item.nota || '-';
   document.getElementById('interDetailTipo').textContent = item.tipo || '-';
+  document.getElementById('interDetailArchivo').textContent = item.nombreArchivo || '-';
   document.getElementById('interDetailBox').style.display = 'block';
 }
 
@@ -603,10 +608,12 @@ document.getElementById('interSearchInput').addEventListener('keyup', e => {
   if (e.key === 'Enter') renderInterTable();
 });
 
-document.getElementById('btnAddInter').addEventListener('click', async () => {
-  const filePath = await window.api.selectCrtFileForInter();
-  if (!filePath) return;
-
+/**
+ * Procesa un archivo de intermediario/root (venga del diálogo "+ Agregar"
+ * o de arrastrarlo a la zona de arrastre) y muestra el formulario de alta
+ * con los datos ya extraídos, listo para confirmar.
+ */
+async function handleInterFileSelected(filePath) {
   const result = await window.api.parseIntermediarioFile(filePath);
   if (!result.ok) {
     alert('No se pudo leer el certificado: ' + result.error);
@@ -619,10 +626,28 @@ document.getElementById('btnAddInter').addEventListener('click', async () => {
   document.getElementById('interFormEmitidoPara').textContent = result.data.emitidoPara;
   document.getElementById('interFormFechaInicio').textContent = result.data.fechaInicio || '-';
   document.getElementById('interFormFechaFin').textContent = result.data.fechaFin || '-';
+  document.getElementById('interFormArchivo').textContent = result.data.nombreArchivo || '-';
   document.getElementById('interFormTitulo5').value = '';
   document.getElementById('interFormTipo').value = result.data.tipoSugerido || 'Intermediario';
 
   document.getElementById('interAddFormBox').style.display = 'block';
+}
+
+document.getElementById('btnAddInter').addEventListener('click', async () => {
+  const filePath = await window.api.selectCrtFileForInter();
+  if (!filePath) return;
+  await handleInterFileSelected(filePath);
+});
+
+setupDropzone(document.getElementById('dropInter'), async (file, el) => {
+  document.getElementById('dropInterName').textContent = file.name;
+  el.classList.add('loaded');
+  await handleInterFileSelected(file.path);
+  // Se limpia enseguida para que la zona quede lista para arrastrar el siguiente archivo
+  setTimeout(() => {
+    el.classList.remove('loaded');
+    document.getElementById('dropInterName').textContent = '';
+  }, 1500);
 });
 
 document.getElementById('btnCancelInter').addEventListener('click', () => {
@@ -640,6 +665,7 @@ document.getElementById('btnSaveInter').addEventListener('click', async () => {
     fechaFin: interState.pendingCandidate.fechaFin,
     nota: document.getElementById('interFormTitulo5').value.trim(),
     tipo: document.getElementById('interFormTipo').value,
+    nombreArchivo: interState.pendingCandidate.nombreArchivo,
     pem: interState.pendingCandidate.pem
   };
 
@@ -735,14 +761,5 @@ function resetView(viewId) {
       btn.disabled = false;
       break;
     }
-
-    case 'view-intermediarios':
-      document.getElementById('interSearchInput').value = '';
-      document.getElementById('interAddFormBox').style.display = 'none';
-      document.getElementById('interDetailBox').style.display = 'none';
-      interState.selectedIds.clear();
-      interState.pendingCandidate = null;
-      renderInterTable();
-      break;
   }
 }

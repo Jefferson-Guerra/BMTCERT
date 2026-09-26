@@ -242,7 +242,11 @@
       <section id="view-intermediarios" class="view">
         <h1>Intermediarios</h1>
 
-        <button class="btn-reset" onclick="resetView('view-intermediarios')">🔄 Reiniciar</button>
+        <div class="dropzone" id="dropInter" data-accept=".crt,.cer,.pem">
+          <div class="dz-icon">🗂️</div>
+          <div>Arrastra aquí un intermediario o root (<b>.crt</b>) para agregarlo</div>
+          <div class="dz-filename" id="dropInterName"></div>
+        </div>
 
         <div class="section-box">
           <div class="inter-toolbar">
@@ -261,6 +265,7 @@
             <tr><td>Título 2 (Emitido para):</td><td id="interFormEmitidoPara">-</td></tr>
             <tr><td>Título 3 (Fecha Inicio):</td><td id="interFormFechaInicio">-</td></tr>
             <tr><td>Título 4 (Fecha Fin):</td><td id="interFormFechaFin">-</td></tr>
+            <tr><td>Nombre de archivo original:</td><td id="interFormArchivo">-</td></tr>
           </table>
           <div class="field-row" style="margin-top:12px;">
             <label>Título 5 (opcional)</label>
@@ -290,6 +295,7 @@
                 <th>Fecha Inicio</th>
                 <th>Fecha Fin</th>
                 <th>Tipo</th>
+                <th>Archivo</th>
                 <th>Título 5</th>
               </tr>
             </thead>
@@ -307,6 +313,7 @@
             <tr><td>Título 4 (Fecha Fin):</td><td id="interDetailT4">-</td></tr>
             <tr><td>Título 5 (opcional):</td><td id="interDetailT5">-</td></tr>
             <tr><td>Tipo:</td><td id="interDetailTipo">-</td></tr>
+            <tr><td>Nombre de archivo original:</td><td id="interDetailArchivo">-</td></tr>
           </table>
         </div>
       </section>

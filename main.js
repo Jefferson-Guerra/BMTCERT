@@ -10,6 +10,49 @@ const { validateCertAndKey, validateCsrAndCert, validateCsrAndKey } = require('.
 const { decodeCrt, decodeCsr, decodePfx, decodeJks } = require('./lib/decoder');
 const { reinforcePfxWindows } = require('./lib/win/pfxReinforcer');
 const intermediariosStore = require('./lib/intermediariosStore');
+const { CHAINS } = require('./lib/chains');
+
+/**
+ * Decide qué cadena de intermedios/root usar para un certificado, en este orden:
+ *
+ *  1) Busca en "Intermediarios" (lo que el usuario agregó manualmente),
+ *     siguiendo el emisor del certificado hasta llegar a una Raíz. Esto
+ *     funciona para CUALQUIER CA (DigiCert, RapidSSL, Sectigo, etc.),
+ *     siempre que el usuario haya subido esos intermedios/root ahí.
+ *  2) Si no encuentra nada (o el usuario todavía no cargó esos
+ *     intermediarios), y el certificado es DV/OV/EV de Sectigo, usa las
+ *     cadenas que vienen integradas de fábrica en la app.
+ *  3) Si la búsqueda en "Intermediarios" encontró ALGO pero está
+ *     incompleta (no llegó hasta la Raíz), se devuelve igual esa cadena
+ *     parcial con una advertencia, en vez de fallar directamente.
+ */
+function resolveChainCerts({ issuerCN, tipoValidacion }) {
+  const store = intermediariosStore.readStore(getIntermediariosStorePath());
+  const resolved = intermediariosStore.resolveChain(issuerCN, store);
+
+  if (resolved.completa) {
+    return { chainCerts: resolved.chain, source: 'intermediarios' };
+  }
+
+  const tipo = (tipoValidacion || '').toUpperCase();
+  const chainData = CHAINS[tipo];
+  if (chainData) {
+    return {
+      chainCerts: [
+        { pem: chainData.inter1, fileName: 'intermediate1.crt' },
+        { pem: chainData.inter2, fileName: 'intermediate2.crt' },
+        { pem: chainData.root, fileName: 'root.crt' }
+      ],
+      source: 'sectigo-integrada'
+    };
+  }
+
+  if (resolved.chain.length > 0) {
+    return { chainCerts: resolved.chain, source: 'intermediarios-incompleta' };
+  }
+
+  return { chainCerts: [], source: 'ninguna' };
+}
 
 /**
  * Calcula la ruta del archivo intermediarios.json.
@@ -119,8 +162,19 @@ ipcMain.handle('select-export-directory', async () => {
 
 ipcMain.handle('export-server-folders', async (event, params) => {
   try {
-    const created = exportServerFolders(params);
-    return { ok: true, created };
+    const { chainCerts, source } = resolveChainCerts(params);
+    if (chainCerts.length === 0) {
+      return {
+        ok: false,
+        error: `No se encontró la cadena de intermedios/root para el emisor "${params.issuerCN || '-'}". ` +
+          'Agrega el intermediario y root correspondientes en la sección "Intermediarios" y vuelve a intentar.'
+      };
+    }
+    const created = exportServerFolders({ ...params, chainCerts });
+    const warning = source === 'intermediarios-incompleta'
+      ? ' ⚠️ La cadena está incompleta: agrega el eslabón que falta hasta llegar a la Raíz en "Intermediarios".'
+      : '';
+    return { ok: true, created, chainSource: source, warning };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -139,15 +193,27 @@ ipcMain.handle('select-save-path', async (event, { defaultName, filters }) => {
 
 ipcMain.handle('export-pfx', async (event, params) => {
   try {
+    const { chainCerts, source } = resolveChainCerts(params);
+    if (chainCerts.length === 0) {
+      return {
+        ok: false,
+        error: `No se encontró la cadena de intermedios/root para el emisor "${params.issuerCN || '-'}". ` +
+          'Agrega el intermediario y root correspondientes en la sección "Intermediarios" y vuelve a intentar.'
+      };
+    }
+
     const { targetDir, alias } = params;
     const pfxDir = path.join(targetDir, 'PFX');
     fs.mkdirSync(pfxDir, { recursive: true });
     const outputPath = path.join(pfxDir, `${alias}.pfx`);
 
-    generatePfx({ ...params, outputPath });
+    generatePfx({ ...params, chainCerts, outputPath });
     writeClaveTxt(outputPath, params.password);
 
-    return { ok: true, path: outputPath };
+    const warning = source === 'intermediarios-incompleta'
+      ? ' ⚠️ La cadena está incompleta: agrega el eslabón que falta hasta llegar a la Raíz en "Intermediarios".'
+      : '';
+    return { ok: true, path: outputPath, chainSource: source, warning };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -157,15 +223,27 @@ ipcMain.handle('export-pfx', async (event, params) => {
 
 ipcMain.handle('export-jks', async (event, params) => {
   try {
+    const { chainCerts, source } = resolveChainCerts(params);
+    if (chainCerts.length === 0) {
+      return {
+        ok: false,
+        error: `No se encontró la cadena de intermedios/root para el emisor "${params.issuerCN || '-'}". ` +
+          'Agrega el intermediario y root correspondientes en la sección "Intermediarios" y vuelve a intentar.'
+      };
+    }
+
     const { targetDir, alias } = params;
     const jksDir = path.join(targetDir, 'JKS');
     fs.mkdirSync(jksDir, { recursive: true });
     const outputPath = path.join(jksDir, `${alias}.jks`);
 
-    await generateJks({ ...params, outputPath });
+    await generateJks({ ...params, chainCerts, outputPath });
     writeClaveTxt(outputPath, params.password);
 
-    return { ok: true, path: outputPath };
+    const warning = source === 'intermediarios-incompleta'
+      ? ' ⚠️ La cadena está incompleta: agrega el eslabón que falta hasta llegar a la Raíz en "Intermediarios".'
+      : '';
+    return { ok: true, path: outputPath, chainSource: source, warning };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -285,6 +363,7 @@ ipcMain.handle('parse-intermediario-file', async (event, filePath) => {
         fechaInicio: info.validFromStr,
         fechaFin: info.validToStr,
         tipoSugerido,
+        nombreArchivo: path.basename(filePath),
         pem
       }
     };
